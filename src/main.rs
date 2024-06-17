@@ -20,6 +20,7 @@ struct WorkObject {
     cited_by_count: u32,
     title: String,
     primary_topic: Topic,
+    language: String,
     publication_year: u32,
     publication_date: Option<String>,
 }
@@ -47,6 +48,9 @@ impl WorkObject {
         if !self.open_access.is_oa && self.open_access.oa_status != "gold" {
             return false;
         }
+        if self.language != "en" {
+            return false;
+        }
         if self.primary_topic.domain.display_name != "Social Sciences" {
             return false;
         }
@@ -57,7 +61,7 @@ impl WorkObject {
 
 impl PartialEq for WorkObject {
     fn eq(&self, other: &Self) -> bool {
-        self.cited_by_count == other.cited_by_count
+        other.cited_by_count == self.cited_by_count
     }
 }
 
@@ -65,13 +69,25 @@ impl Eq for WorkObject {}
 
 impl PartialOrd for WorkObject {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
+        Some(other.cmp(self))
+    }
+    fn lt(&self, other: &Self) -> bool {
+        other.cited_by_count < self.cited_by_count
+    }
+    fn le(&self, other: &Self) -> bool {
+        other.cited_by_count <= self.cited_by_count
+    }
+    fn gt(&self, other: &Self) -> bool {
+        other.cited_by_count > self.cited_by_count
+    }
+    fn ge(&self, other: &Self) -> bool {
+        other.cited_by_count >= self.cited_by_count
     }
 }
 
 impl Ord for WorkObject {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.cited_by_count.cmp(&other.cited_by_count)
+        other.cited_by_count.cmp(&self.cited_by_count)
     }
 }
 
@@ -90,7 +106,6 @@ async fn main() {
 
     let max_heap: BinaryHeap<WorkObject> = BinaryHeap::new();
     let objects = Arc::new(Mutex::from(max_heap));
-    let count = Arc::new(Mutex::new(0));
 
     for entry in WalkDir::new(OPENALEX_WORKS_DIRECTORY) {
         let path = entry.unwrap();
@@ -104,14 +119,11 @@ async fn main() {
                     }
                 };
 
-                let count = Arc::clone(&count);
                 let objects = Arc::clone(&objects);
                 let handle = tokio::spawn(async move {
                     if obj.is_useful() {
-                        let mut count = count.lock().await;
-                        let mut object = objects.lock().await;
-                        object.push(obj);
-                        *count += 1;
+                        let mut objects = objects.lock().await;
+                        objects.push(obj)
                     }
                 });
 
@@ -124,7 +136,7 @@ async fn main() {
         let _ = handle.await;
     }
 
-    let count = count.lock().await;
-    let best = objects.lock().await.peek().unwrap().cited_by_count;
-    println!("Useful objects: {}\n\tbest one: {}", count, best)
+    let total = objects.lock().await.len();
+    let best = objects.lock().await.peek().unwrap().title.clone();
+    println!("Useful objects: {}\n\tbest one: {}", total, best)
 }
