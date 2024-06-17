@@ -1,4 +1,5 @@
 use std::{
+    collections::BinaryHeap,
     fs::File,
     io::{self, BufRead},
     path::Path,
@@ -54,6 +55,26 @@ impl WorkObject {
     }
 }
 
+impl PartialEq for WorkObject {
+    fn eq(&self, other: &Self) -> bool {
+        self.cited_by_count == other.cited_by_count
+    }
+}
+
+impl Eq for WorkObject {}
+
+impl PartialOrd for WorkObject {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for WorkObject {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.cited_by_count.cmp(&other.cited_by_count)
+    }
+}
+
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<flate2::read::GzDecoder<File>>>>
 where
     P: AsRef<Path>,
@@ -67,6 +88,8 @@ where
 async fn main() {
     let mut handles = vec![];
 
+    let max_heap: BinaryHeap<WorkObject> = BinaryHeap::new();
+    let objects = Arc::new(Mutex::from(max_heap));
     let count = Arc::new(Mutex::new(0));
 
     for entry in WalkDir::new(OPENALEX_WORKS_DIRECTORY) {
@@ -82,9 +105,12 @@ async fn main() {
                 };
 
                 let count = Arc::clone(&count);
+                let objects = Arc::clone(&objects);
                 let handle = tokio::spawn(async move {
                     if obj.is_useful() {
                         let mut count = count.lock().await;
+                        let mut object = objects.lock().await;
+                        object.push(obj);
                         *count += 1;
                     }
                 });
@@ -99,5 +125,6 @@ async fn main() {
     }
 
     let count = count.lock().await;
-    println!("Useful objects: {}", count)
+    let best = objects.lock().await.peek().unwrap().cited_by_count;
+    println!("Useful objects: {}\n\tbest one: {}", count, best)
 }
