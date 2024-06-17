@@ -2,10 +2,12 @@ use std::{
     fs::File,
     io::{self, BufRead},
     path::Path,
+    sync::Arc,
 };
 
 use flate2::read::GzDecoder;
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
 use walkdir::WalkDir;
 
 const OPENALEX_WORKS_DIRECTORY: &str = "openalex-snapshot-works/";
@@ -61,10 +63,11 @@ where
     Ok(io::BufReader::new(gz).lines())
 }
 
-fn main() {
-    // let mut handles = vec![];
+#[tokio::main]
+async fn main() {
+    let mut handles = vec![];
 
-    let mut count = 0;
+    let count = Arc::new(Mutex::new(0));
 
     for entry in WalkDir::new(OPENALEX_WORKS_DIRECTORY) {
         let path = entry.unwrap();
@@ -78,12 +81,23 @@ fn main() {
                     }
                 };
 
-                if obj.is_useful() {
-                    count += 1;
-                }
+                let count = Arc::clone(&count);
+                let handle = tokio::spawn(async move {
+                    if obj.is_useful() {
+                        let mut count = count.lock().await;
+                        *count += 1;
+                    }
+                });
+
+                handles.push(handle);
             }
         }
     }
 
+    for handle in handles {
+        let _ = handle.await;
+    }
+
+    let count = count.lock().await;
     println!("Useful objects: {}", count)
 }
