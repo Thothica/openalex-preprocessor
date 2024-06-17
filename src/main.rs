@@ -16,6 +16,7 @@ struct WorkObject {
     cited_by_count: u32,
     title: String,
     primary_topic: Topic,
+    language: String,
     publication_year: u32,
     publication_date: Option<String>,
 }
@@ -41,6 +42,9 @@ struct Domain {
 impl WorkObject {
     fn is_useful(&self) -> bool {
         if !self.open_access.is_oa && self.open_access.oa_status != "gold" {
+            return false;
+        }
+        if self.language != "en" {
             return false;
         }
         if self.primary_topic.domain.display_name != "Social Sciences" {
