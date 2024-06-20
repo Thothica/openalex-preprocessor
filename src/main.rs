@@ -9,7 +9,6 @@ use flate2::read::GzDecoder;
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
-
 const OPENALEX_WORKS_DIRECTORY: &str = "openalex-snapshot-works/";
 // const OUTPUT_DIRECTORY: &str = "processed-data/";
 
@@ -88,7 +87,6 @@ where
 }
 
 fn main() {
-
     let mut max_heap: BinaryHeap<WorkObject> = BinaryHeap::new();
     let mut greatest = 0;
 
