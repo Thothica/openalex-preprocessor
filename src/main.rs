@@ -3,12 +3,10 @@ use std::{
     fs::File,
     io::{self, BufRead},
     path::Path,
-    sync::Arc,
 };
 
 use flate2::read::GzDecoder;
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
 use walkdir::WalkDir;
 
 const OPENALEX_WORKS_DIRECTORY: &str = "openalex-snapshot-works/";
@@ -61,7 +59,7 @@ impl WorkObject {
 
 impl PartialEq for WorkObject {
     fn eq(&self, other: &Self) -> bool {
-        other.cited_by_count == self.cited_by_count
+        self.cited_by_count == other.cited_by_count
     }
 }
 
@@ -70,18 +68,6 @@ impl Eq for WorkObject {}
 impl PartialOrd for WorkObject {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(other.cmp(self))
-    }
-    fn lt(&self, other: &Self) -> bool {
-        other.cited_by_count < self.cited_by_count
-    }
-    fn le(&self, other: &Self) -> bool {
-        other.cited_by_count <= self.cited_by_count
-    }
-    fn gt(&self, other: &Self) -> bool {
-        other.cited_by_count > self.cited_by_count
-    }
-    fn ge(&self, other: &Self) -> bool {
-        other.cited_by_count >= self.cited_by_count
     }
 }
 
@@ -100,12 +86,9 @@ where
     Ok(io::BufReader::new(gz).lines())
 }
 
-#[tokio::main]
-async fn main() {
-    let mut handles = vec![];
-
-    let max_heap: BinaryHeap<WorkObject> = BinaryHeap::new();
-    let objects = Arc::new(Mutex::from(max_heap));
+fn main() {
+    let mut max_heap: BinaryHeap<WorkObject> = BinaryHeap::new();
+    let mut greatest = 0;
 
     for entry in WalkDir::new(OPENALEX_WORKS_DIRECTORY) {
         let path = entry.unwrap();
@@ -119,24 +102,18 @@ async fn main() {
                     }
                 };
 
-                let objects = Arc::clone(&objects);
-                let handle = tokio::spawn(async move {
-                    if obj.is_useful() {
-                        let mut objects = objects.lock().await;
-                        objects.push(obj)
+                if obj.is_useful() && obj.cited_by_count > 0 {
+                    if obj.cited_by_count > greatest {
+                        greatest = obj.cited_by_count;
                     }
-                });
-
-                handles.push(handle);
+                    max_heap.push(obj);
+                }
             }
         }
     }
 
-    for handle in handles {
-        let _ = handle.await;
-    }
-
-    let total = objects.lock().await.len();
-    let best = objects.lock().await.peek().unwrap().title.clone();
-    println!("Useful objects: {}\n\tbest one: {}", total, best)
+    let total = max_heap.len();
+    let best = max_heap.peek().unwrap().cited_by_count;
+    println!("Useful objects: {}\nbest one: {}", total, best);
+    println!("Greatest: {}", greatest);
 }
