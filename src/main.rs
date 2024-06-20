@@ -9,6 +9,7 @@ use flate2::read::GzDecoder;
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
+
 const OPENALEX_WORKS_DIRECTORY: &str = "openalex-snapshot-works/";
 // const OUTPUT_DIRECTORY: &str = "processed-data/";
 
@@ -87,12 +88,12 @@ where
 }
 
 fn main() {
+
     let mut max_heap: BinaryHeap<WorkObject> = BinaryHeap::new();
     let mut greatest = 0;
 
     for entry in WalkDir::new(OPENALEX_WORKS_DIRECTORY) {
         let path = entry.unwrap();
-
         if let Ok(contents) = read_lines(path.path()) {
             for content in contents.flatten() {
                 let obj: WorkObject = match serde_json::from_str(&content) {
@@ -101,7 +102,6 @@ fn main() {
                         continue;
                     }
                 };
-
                 if obj.is_useful() && obj.cited_by_count > 0 {
                     if obj.cited_by_count > greatest {
                         greatest = obj.cited_by_count;
