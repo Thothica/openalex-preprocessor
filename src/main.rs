@@ -1,16 +1,17 @@
 use std::{
     collections::BinaryHeap,
     fs::File,
-    io::{self, BufRead},
+    io::{self, BufRead, Write},
     path::Path,
 };
 
-use flate2::read::GzDecoder;
+use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
 const OPENALEX_WORKS_DIRECTORY: &str = "openalex-snapshot-works/";
-// const OUTPUT_DIRECTORY: &str = "processed-data/";
+const OUTPUT_FILE: &str = "best_works.jsonl.gz";
+const TOTAL_OBJECTS: u32 = 1_050_000;
 
 #[derive(Deserialize, Debug, Serialize)]
 struct WorkObject {
@@ -43,7 +44,7 @@ struct Domain {
 
 impl WorkObject {
     fn is_useful(&self) -> bool {
-        if !self.open_access.is_oa && self.open_access.oa_status != "gold" {
+        if !self.open_access.is_oa {
             return false;
         }
         if self.language != "en" {
@@ -88,7 +89,7 @@ where
 
 fn main() {
     let mut max_heap: BinaryHeap<WorkObject> = BinaryHeap::new();
-    let mut greatest = 0;
+    println!("processing directory: {}", OPENALEX_WORKS_DIRECTORY);
 
     for entry in WalkDir::new(OPENALEX_WORKS_DIRECTORY) {
         let path = entry.unwrap();
@@ -96,14 +97,11 @@ fn main() {
             for content in contents.flatten() {
                 let obj: WorkObject = match serde_json::from_str(&content) {
                     Ok(data) => data,
-                    Err(_err) => {
+                    Err(_) => {
                         continue;
                     }
                 };
                 if obj.is_useful() && obj.cited_by_count > 0 {
-                    if obj.cited_by_count > greatest {
-                        greatest = obj.cited_by_count;
-                    }
                     max_heap.push(obj);
                 }
             }
@@ -112,6 +110,24 @@ fn main() {
 
     let total = max_heap.len();
     let best = max_heap.peek().unwrap().cited_by_count;
-    println!("Useful objects: {}\nbest one: {}", total, best);
-    println!("Greatest: {}", greatest);
+    println!(
+        "Reading complete\nRead {} objetcs\nhighest_citation: {}",
+        total, best
+    );
+
+    let output = File::create(OUTPUT_FILE).unwrap();
+    let mut encoder = GzEncoder::new(output, Compression::default());
+
+    println!("Writing objects in {}", OUTPUT_FILE);
+
+    for _ in 0..TOTAL_OBJECTS {
+        let obj = match max_heap.pop() {
+            Some(data) => data,
+            None => break,
+        };
+        let json = serde_json::to_string(&obj).unwrap() + "\n";
+        encoder.write_all(json.as_bytes()).unwrap();
+    }
+
+    encoder.try_finish().unwrap();
 }
