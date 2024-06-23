@@ -15,6 +15,7 @@ const TOTAL_OBJECTS: u32 = 1_050_000;
 
 #[derive(Deserialize, Debug, Serialize)]
 struct WorkObject {
+    id: String,
     open_access: OpenAcess,
     cited_by_count: u32,
     title: String,
